@@ -32,6 +32,7 @@
 #include "DallasTemperature.h"
 #define SEALEVELPRESSURE_HPA (1012.00)
 void printValues();
+float getTemp(int sensor);
 void appendFile(fs::FS &fs, const char * path, const char * message);
 void writeFile(fs::FS &fs, const char * path, const char * message);
 
@@ -43,8 +44,10 @@ RTC_DS1307 rtc;
 DateTime now = rtc.now();
 Adafruit_ADS1115 ads1(0x48);  /* Use this for the 16-bit version */
 Adafruit_ADS1115 ads2(0x49);  /* Use this for the 16-bit version */
-float_t factor = 0.18750;
-float_t factor2 = 0.0078125;
+Adafruit_ADS1115 ads3(0x4A);  /* Use this for the 16-bit version */
+Adafruit_ADS1115 ads4(0x4B);  /* Use this for the 16-bit version */
+float_t factor2 = 0.18750;
+float_t factor = 0.0078125;
 
 //CRIA VARIÁVEIS GLOBAIS
 int day;
@@ -79,9 +82,10 @@ const int PLUV = 33;
 int reedcount = 0;              //This is the variable that hold the count of switching
 
 //const int chipSelect = 17;
-OneWire oneWire(4);
+#define ONE_WIRE_BUS 16
+OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature tempSensor(&oneWire);
-
+DeviceAddress addtempsensor = {0x28, 0xFF, 0x3E, 0xC4, 0xB4, 0x16, 0x03, 0xDF};
 //==============================================================
 //FUNCAO QUE ATUALIZA AS VARIÁVEIS GLOBAIS E RETORNA A HORA
 //==============================================================
@@ -125,32 +129,20 @@ String getTime() {
   return time;
 
 }
-float velocidade(){
-  if(millis() > readTime){
-    RPM=((counter)*60)/(period/1000);  // Calculate revolutions per minute (RPM)
-    counter = 0;
-    speedwind = (((4 * pi * radius * RPM)/60) / 1000)*3.6;  // Calculate wind speed on km/h
-    vel = speedwind;
-    speedwind = 0;
-    attachInterrupt(digitalPinToInterrupt(anemoPin), addcount, RISING);
-    readTime = millis() + period;
-
-  }
-    return vel/5;
-  }
-
-
-
 String getData(){
 String  temperatura =    String(bme.readTemperature());
 String  pressao     =    String(bme.readPressure() / 100.0F);
 String  umidade     =    String(bme.readHumidity());
 String  irradiancia =    String(ads1.readADC_Differential_2_3()*factor/(1.69/100),5);
 String  direcao     =    String(get_wind_direction());
-tempSensor.requestTemperaturesByIndex(0);
-String temp_panel   =    String(tempSensor.getTempCByIndex(0));
-String  tensao =   String(ads2.readADC_Differential_0_1() * 250.00000*factor2/1000.00000,5);
-String corrente = String(ads2.readADC_Differential_2_3() * 2.00000*factor2/1000.00000,5);
+tempSensor.requestTemperaturesByAddress(addtempsensor);
+String temp_panel   =    String(tempSensor.getTempC(addtempsensor));
+String  tensao =   String((-1)*ads3.readADC_Differential_0_1() * 200.00000*0.18750/1000.00000,5);
+String corrente = String(ads4.readADC_Differential_2_3()*0.18750*3.00000/1000.00000,5 );//* 2.00000*factor2,5
+// Serial.println(String(ads3.readADC_Differential_0_1() *0.1875/1000));
+//
+// Serial.println(String(ads4.readADC_Differential_2_3() *0.1875/1000));
+
 
 String data = getTime();
 
@@ -181,6 +173,7 @@ String data = getTime();
   data += "|";
   data += corrente;
   data += '\n';
+  //Serial.println(tempSensor.getTempC(0));
   return data;
 
 }
@@ -210,15 +203,78 @@ int get_wind_direction()
 
 
 
+void printAddress(DeviceAddress deviceAddress)
+
+{
+
+  for (uint8_t i = 0; i < 8; i++)
+
+  {
+
+    if (deviceAddress[i] < 16) Serial.print("0");
+
+    Serial.print(deviceAddress[i], HEX);
+
+  }
+
+}
+int numberOfDevices = 1;
+DeviceAddress tempDeviceAddress;
+
+void getDeviceAddress(void) {
+  byte i;
+  byte addr[8];
+
+  Serial.println("Getting the address...\n\r");
+  /* initiate a search for the OneWire object we created and read its value into
+  addr array we declared above*/
+
+  while(oneWire.search(addr)) {
+    Serial.print("The address is:\t");
+    //read each byte in the address array
+    for( i = 0; i < 8; i++) {
+      Serial.print("0x");
+      if (addr[i] < 16) {
+        Serial.print('0');
+      }
+      // print each byte in the address array in hex format
+      Serial.print(addr[i], HEX);
+      if (i < 7) {
+        Serial.print(", ");
+      }
+    }
+    // a check to make sure that what we read is correct.
+    if ( OneWire::crc8( addr, 7) != addr[7]) {
+        Serial.print("CRC is not valid!\n");
+        return;
+    }
+  }
+  oneWire.reset_search();
+  return;
+}
+///28 FF 3E C4 B4 16 03 DF
+
+
 
 void setup() {
 
     Serial.begin(115200);
     delay(1000);
+    //getDeviceAddress();
+    tempSensor.setResolution(addtempsensor,9);
+
+
+
+
     ads1.setGain(GAIN_SIXTEEN);
     ads1.begin();
+    ads2.setGain(GAIN_TWOTHIRDS);
+    ads2.begin();
+    ads3.setGain(GAIN_TWOTHIRDS);
+    ads3.begin();
+    ads4.setGain(GAIN_TWOTHIRDS);
+    ads4.begin();
 
-    tempSensor.begin();
     //REMOVA O COMENTÁRIO DE UMA DAS LINHAS ABAIXO PARA INSERIR AS INFORMAÇÕES ATUALIZADAS EM SEU RTC
     //rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
     //rtc.adjust(DateTime(2019, 3, 6, 14, 57, 00)); //(ANO), (MÊS), (DIA), (HORA), (MINUTOS), (SEGUNDOS)
@@ -285,19 +341,21 @@ void setup() {
     path += month;
     path += ".csv";
     //ESCREVE O CABEÇALHO DO ARQUIVO
-    appendFile(SD, path.c_str(), "HORA:MINUTO:SEGUNDO|TEMPERATURA|PRESSAO|UMIDADE|IRRADIANCIA|VELOCIDADE|DIRECAO|CHUVA|TEMP_PAINEL\n");
+    appendFile(SD, path.c_str(), "HORA:MINUTO:SEGUNDO|TEMPERATURA|PRESSAO|UMIDADE|IRRADIANCIA|VELOCIDADE|DIRECAO|CHUVA|TEMP_PAINEL|TENSAO|CORRENTE\n");
     anterior = seconds;
+    Serial.println("FIM DO SETUP");
 
 
 }
 
 
 
-void loop() {
+void loop(){
   attachInterrupt(digitalPinToInterrupt(anemoPin), addcount, RISING);
   attachInterrupt(digitalPinToInterrupt(PLUV),addReedcount, FALLING);
   String data = getTime();
   //ANTERIOR COMEÇA COM ZERO E SE QUANDO A SEGUNDO MUDAR, ELE RECEBE O VALOR DO SEGUNDO ATUALIZADO. EVITA DE USAR DELAY E GARANTE QUE SEMPRE O VALOR DOS SEGUNDOS ATUALIZADOS
+
   if (seconds !=  anterior){
       anterior = seconds;
       String data = getData();
@@ -306,13 +364,13 @@ void loop() {
       path += "_";
       path += month;
       path += ".csv";
-      get_wind_direction();
       Serial.print(data);
       //CONDICAO DE INICIO DE UM DIA = 00 HORAS:00 MINUTOS
       if (hour ==0 && minutes == 0 && seconds == 0 ){
         //ESCREVE O CABEÇALHO DO ARQUIVO QUANDO INICIA UM DIA
          reedcount =0;
-        writeFile(SD, path.c_str(), "HORA:MINUTO:SEGUNDO|TEMPERATURA|PRESSAO|UMIDADE|IRRADIANCIA|VELOCIDADE|DIRECAO|CHUVA|TEMP_PAINEL\n");
+
+        writeFile(SD, path.c_str(), "HORA:MINUTO:SEGUNDO|TEMPERATURA|PRESSAO|UMIDADE|IRRADIANCIA|VELOCIDADE|DIRECAO|CHUVA|TEMP_PAINEL|TENSAO|CORRENTE\n");
       }
       //SE NÃO FOR UM INICIO DE DIA ESCREVE NO FIM
       appendFile(SD, path.c_str(), data.c_str());
