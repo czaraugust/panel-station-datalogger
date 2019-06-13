@@ -26,8 +26,9 @@
 #include <SPI.h>
 #include <SD.h> //INSTALL 161
 #include <Adafruit_Sensor.h>
-#include <Adafruit_BME280.h>
+//#include <Adafruit_BME280.h>
 #include <Adafruit_ADS1015.h>
+#include "SHTSensor.h"
 #include "OneWire.h"
 #include "DallasTemperature.h"
 #define SEALEVELPRESSURE_HPA (1012.00)
@@ -37,7 +38,9 @@ void appendFile(fs::FS &fs, const char * path, const char * message);
 void writeFile(fs::FS &fs, const char * path, const char * message);
 
 //CRIA O OBJETO bme
-Adafruit_BME280 bme; // I2C
+//Adafruit_BME280 bme; // I2C
+//CRIA O OBJETO SHT20
+SHTSensor sht;
 //CRIA O OBJETO RTC
 RTC_DS1307 rtc;
 //CRIA A VARIÁVEL QUE RECEBE O VALOR DE HORA ATUAL
@@ -130,9 +133,9 @@ String getTime() {
 
 }
 String getData(){
-String  temperatura =    String(bme.readTemperature());
-String  pressao     =    String(bme.readPressure() / 100.0F);
-String  umidade     =    String(bme.readHumidity());
+String  temperatura =    String(sht.getTemperature());
+String  pressao     =    String(0);//String(bme.readPressure() / 100.0F);
+String  umidade     =    String(sht.getHumidity());
 String  irradiancia =    String(ads1.readADC_Differential_2_3()*factor/(1.69/100),5);
 String  direcao     =    String(get_wind_direction());
 tempSensor.requestTemperaturesByAddress(addtempsensor);
@@ -315,12 +318,16 @@ void setup() {
         Serial.println("UNKNOWN");
     }
 
-    bool status = bme.begin(0x76);
-    if (!status) {
-        Serial.println("Could not find a valid BME280 sensor, check wiring!");
-        while (1);
-    }
+    // bool status = bme.begin(0x76);
+    // if (!status) {
+    //     Serial.println("Could not find a valid BME280 sensor, check wiring!");
+    //     while (1);
+    // }
 
+    if (!sht.init()) {
+      Serial.println("Could not find a valid sht20 sensor, check wiring!");
+      while (1);
+    }
 
     pinMode(anemoPin, INPUT_PULLUP);
     pinMode(PLUV, INPUT_PULLUP);
